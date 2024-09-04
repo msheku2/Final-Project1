@@ -1,26 +1,183 @@
 ---
-title: "Final project1"
+title: "EPI 590R-Final project1"
+author: "Mahmud Sheku"
+date: "09-01-2024"
 format: html
 editor: visual
 ---
 
-## Quarto
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
-
-```{r}
-1 + 1
-```
-
-You can add options to executable code like this
 
 ```{r}
 #| echo: false
-2 * 2
+#| warning: false
+library(tidyverse)
+library(gtsummary)
+library(here)
+library(readr)
+
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+# Load the data
+```{r warning: false}
+#| echo: false
+options(readr.show_col_types = FALSE)
+nutri <- read_csv(here::here("data", "nutri.csv"))
+# nutri1 <- as.data.frame(nutri)
+
+# Select only the desired variables
+nutri_select <- nutri %>%
+  select(sex, cancer, diabetes, heart_disease, belly, ever_smoked, currently_smoke, smoke_often, smoke_rarely, never_smoked, EGGSQUAN, YOGURTQUAN
+  
+) |>
+  mutate(
+    smoking_status = case_when(
+      currently_smoke == "Yes" ~ "Current Smoker",
+      TRUE ~ "Never Smoker")
+      ) |>
+      
+      mutate(
+      	sex_cat = factor(sex, labels = c("Male", "Female")),
+    cancer_cat = factor(cancer, labels = c("Yes", "No")),
+    diabetes_cat = factor(diabetes, labels = c("Yes", "No")),
+    heart_disease_cat = factor(heart_disease, labels = c("Yes", "No")),
+    belly_cat = factor(belly, labels = c("Innie", "Outie")),
+     ever_smoked_cat = factor(ever_smoked, labels = c("Yes", "No")),
+    smoking_status_cat = factor(smoking_status, labels = c("Current Smoker", "Never Smoker")),
+      eggsquan_cat = factor(EGGSQUAN, labels = c("1", "2", "3", "4")),
+    yogurtquan_cat = factor(YOGURTQUAN, labels = c("1", "2", "3")))
+
+# save the selected dataset
+if (!dir.exists("data")) {
+  dir.create("data")
+}
+
+write.csv(nutri_select, "data/nutri_select_output.csv", row.names = FALSE)
+
+
+```
+
+
+```{r -customized tab}
+#| echo: false
+tbl_summary(
+	nutri_select,
+	by = sex_cat,
+	include = c(sex_cat, cancer_cat, diabetes_cat, heart_disease_cat, smoking_status_cat, eggsquan_cat, yogurtquan_cat))  
+
+
+tbl_summary(
+	nutri_select,
+	by = sex,
+	include = c(cancer_cat, diabetes_cat, heart_disease_cat, belly_cat, smoking_status_cat, eggsquan_cat, yogurtquan_cat),
+	label = list(
+    heart_disease_cat ~ "Heart Disease Status",
+    belly_cat ~ "Belly",
+    smoking_status_cat ~ "Smoking Status",
+    eggsquan_cat ~ "Quantity of Eggs Consumed"
+),
+	missing_text = "Missing") |>
+	add_p(test = list(all_continuous() ~ "t.test",
+										all_categorical() ~ "chisq.test")) |>
+	add_overall(col_label = "**Total**") |>
+	bold_labels() |>
+	modify_header(label = "**Variable**", p.value = "**P**")
+
+
+```
+
+#model 
+```{r}
+#| echo: false
+nutri_fit <- read_csv(here::here("data", "nutri_select_output.csv")) |>
+	    mutate(
+      	sex_cat = factor(sex, labels = c("Male", "Female")),
+    cancer_cat = factor(cancer, labels = c("Yes", "No")),
+    diabetes_cat = factor(diabetes, labels = c("Yes", "No")),
+    heart_disease_cat = factor(heart_disease, labels = c("Yes", "No")),
+    belly_cat = factor(belly, labels = c("Innie", "Outie")),
+     ever_smoked_cat = factor(ever_smoked, labels = c("Yes", "No")),
+    smoking_status_cat = factor(smoking_status, labels = c("Current Smoker", "Never Smoker")),
+      eggsquan_cat = factor(EGGSQUAN, labels = c("1", "2", "3", "4")),
+    yogurtquan_cat = factor(YOGURTQUAN, labels = c("1", "2", "3")))
+
+# Model
+
+logistic_model <- glm(cancer_cat ~ heart_disease_cat + smoking_status_cat + eggsquan_cat, 
+                      data = nutri_fit, 
+                      family = binomial)
+
+tbl_regression <- tbl_regression(
+  logistic_model,
+  intercept = TRUE,  # Include the intercept in the table
+  exponentiate = TRUE,  # Exponentiate coefficients to show odds ratios
+  label = list(
+    heart_disease_cat ~ "Heart Disease Status",
+    smoking_status_cat ~ "Smoking Status",
+    eggsquan_cat ~ "Quantity of Eggs Consumed"
+  )
+)
+
+# Display table
+tbl_regression
+
+tbl_no_int <- tbl_regression(
+	logistic_model,
+	intercept = TRUE,
+	label = list(
+		  heart_disease_cat ~ "Heart Disease Status",
+    smoking_status_cat ~ "Smoking Status",
+    eggsquan_cat ~ "Quantity of Eggs Consumed"
+	))
+
+
+```
+
+#table
+```{r}
+#| echo: false
+#| label: tbl-descr
+#| tbl-cap: "Descriptive statistics"
+table3 <- tbl_summary(
+  nutri_fit,
+  by = sex_cat,
+  include = c(sex_cat, heart_disease_cat, cancer_cat, diabetes_cat, eggsquan_cat)
+) |>
+  add_overall(last = TRUE) |>
+  modify_header(label = "**Variable**")
+
+table3
+```
+
+```{r}
+#| echo: false
+inline_text(table3, variable = "cancer_cat"
+, column = "Female")
+
+inline_text(table3, variable = "eggsquan_cat", level = "3"
+, column = "Female")
+```
+
+# Results
+```{r}
+#| echo: false
+#| label: fig-hist
+#| fig-cap: "This is a histogram of Egg Quantity"
+
+numeric_eggsquan <- as.numeric(as.character(nutri_select$eggsquan_cat))
+
+# Create histogram
+hist(numeric_eggsquan, 
+     main = "Egg Quantity", 
+     xlab = "# of eggs", 
+     col = "grey")
+
+
+```
+
+
+@tbl-logistic contains results from the logistic regression.
+
+
+
+
+
